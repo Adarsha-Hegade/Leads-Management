@@ -1,4 +1,4 @@
-export type LeadStatus = 'New' | 'In Progress' | 'Pending Follow-up' | 'Qualified' | 'Lost';
+export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost';
 export type InterestLevel = 'High' | 'Medium' | 'Low';
 
 export interface ActivityChecklist {
@@ -11,7 +11,7 @@ export interface ActivityChecklist {
 
 export interface Interaction {
   date: string;
-  type: 'Call' | 'Email' | 'Meeting' | 'Other';
+  type: 'Call' | 'Email' | 'Meeting' | 'Stage Change' | 'Other';
   summary: string;
   action_items: string[];
   notes?: string;
@@ -49,8 +49,7 @@ export interface Lead {
 export interface LeadStats {
   total: number;
   new: number;
-  inProgress: number;
-  pendingFollowup: number;
-  qualified: number;
-  lost: number;
+  followUp: number;
+  converted: number;
+  notInterested: number;
 }

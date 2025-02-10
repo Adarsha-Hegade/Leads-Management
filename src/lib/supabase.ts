@@ -13,9 +13,21 @@ export async function signUp(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      emailRedirectTo: window.location.origin,
+      data: {
+        email_confirmed: true // This ensures the user can sign in immediately
+      }
+    }
   });
   
   if (error) throw error;
+
+  // Sign in immediately after sign up
+  if (data.user) {
+    return signIn(email, password);
+  }
+  
   return data;
 }
 

@@ -48,8 +48,7 @@ function App() {
     try {
       let query = supabase
         .from('leads')
-        .select('*')
-        .eq('user_id', user.id);
+        .select('*');
 
       if (timeRange !== 'all') {
         const now = new Date();
@@ -75,7 +74,10 @@ function App() {
         }
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      // Add order after all filters
+      query = query.order('created_at', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) throw error;
       if (!data) throw new Error('No data received from Supabase');
@@ -104,8 +106,7 @@ function App() {
       const { error } = await supabase
         .from('leads')
         .update(updatedLead)
-        .eq('id', updatedLead.id)
-        .eq('user_id', user.id);
+        .eq('id', updatedLead.id);
 
       if (error) throw error;
 
@@ -118,7 +119,6 @@ function App() {
       }
     } catch (err) {
       console.error('Error updating lead:', err);
-      // You might want to show an error message to the user here
     }
   };
 

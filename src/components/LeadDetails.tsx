@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { format } from 'date-fns';
 import {
   X, User, Phone, MapPin, Mail, Calendar, MessageSquare,
-  Star, Clock, CheckCircle, XCircle, AlertCircle, Plus
+  Star, Clock, CheckCircle, XCircle, AlertCircle, Plus,
+  ChevronRight, MoveRight
 } from 'lucide-react';
 import type { Lead, LeadStatus, InterestLevel, Interaction } from '../types/lead';
 
@@ -12,22 +13,68 @@ interface LeadDetailsProps {
   onUpdate?: (lead: Lead) => void;
 }
 
+const LEAD_STAGES: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'];
+
 const STATUS_ICONS: Record<LeadStatus, React.ReactNode> = {
   'New': <Star className="text-blue-500" />,
-  'In Progress': <Clock className="text-yellow-500" />,
-  'Pending Follow-up': <AlertCircle className="text-orange-500" />,
+  'Contacted': <Clock className="text-yellow-500" />,
   'Qualified': <CheckCircle className="text-green-500" />,
-  'Lost': <XCircle className="text-gray-500" />
+  'Proposal': <AlertCircle className="text-purple-500" />,
+  'Negotiation': <Clock className="text-orange-500" />,
+  'Won': <CheckCircle className="text-emerald-500" />,
+  'Lost': <XCircle className="text-red-500" />
+};
+
+const getStageColor = (status: LeadStatus) => {
+  switch (status) {
+    case 'New':
+      return 'bg-blue-100 text-blue-800';
+    case 'Contacted':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'Qualified':
+      return 'bg-green-100 text-green-800';
+    case 'Proposal':
+      return 'bg-purple-100 text-purple-800';
+    case 'Negotiation':
+      return 'bg-orange-100 text-orange-800';
+    case 'Won':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'Lost':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 };
 
 export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'activity' | 'history'>('info');
   const [newNote, setNewNote] = useState('');
+  const [showStageModal, setShowStageModal] = useState(false);
+  const [selectedStage, setSelectedStage] = useState<LeadStatus | null>(null);
+  const [stageNote, setStageNote] = useState('');
 
-  const handleStatusChange = (status: LeadStatus) => {
-    if (onUpdate) {
-      onUpdate({ ...lead, status });
-    }
+  const handleStageChange = () => {
+    if (!selectedStage || !onUpdate) return;
+
+    const updatedLead: Lead = {
+      ...lead,
+      status: selectedStage,
+      interactions: [
+        ...lead.interactions,
+        {
+          date: new Date().toISOString(),
+          type: 'Stage Change',
+          summary: `Stage changed from ${lead.status} to ${selectedStage}`,
+          notes: stageNote,
+          action_items: []
+        }
+      ]
+    };
+
+    onUpdate(updatedLead);
+    setShowStageModal(false);
+    setSelectedStage(null);
+    setStageNote('');
   };
 
   const handleInterestChange = (interest_level: InterestLevel) => {
@@ -80,15 +127,13 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
               <div className="ml-4">
                 <h2 className="text-2xl font-bold text-gray-900">{lead.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`px-2 py-1 text-sm rounded-full ${
-                    lead.status === 'Qualified' ? 'bg-green-100 text-green-800' :
-                    lead.status === 'New' ? 'bg-blue-100 text-blue-800' :
-                    lead.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                    lead.status === 'Pending Follow-up' ? 'bg-orange-100 text-orange-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <button
+                    onClick={() => setShowStageModal(true)}
+                    className={`px-3 py-1 text-sm rounded-full flex items-center gap-2 transition-colors ${getStageColor(lead.status)} hover:opacity-90`}
+                  >
                     {lead.status}
-                  </span>
+                    <MoveRight className="w-4 h-4" />
+                  </button>
                   {lead.interest_level && (
                     <span className={`px-2 py-1 text-sm rounded-full ${
                       lead.interest_level === 'High' ? 'bg-green-100 text-green-800' :
@@ -109,6 +154,71 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
             </button>
           </div>
         </div>
+
+        {/* Stage Change Modal */}
+        {showStageModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+            <div className="bg-white rounded-lg w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Lead Stage</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  {LEAD_STAGES.map((stage) => (
+                    <button
+                      key={stage}
+                      onClick={() => setSelectedStage(stage)}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        selectedStage === stage
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {STATUS_ICONS[stage]}
+                        <span className="font-medium">{stage}</span>
+                      </div>
+                      {selectedStage === stage && (
+                        <ChevronRight className="w-5 h-5 text-blue-500" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    value={stageNote}
+                    onChange={(e) => setStageNote(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={3}
+                    placeholder="Add any notes about this stage change..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowStageModal(false);
+                      setSelectedStage(null);
+                      setStageNote('');
+                    }}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleStageChange}
+                    disabled={!selectedStage}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Change Stage
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="border-b border-gray-200">
