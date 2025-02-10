@@ -3,9 +3,9 @@ import { format } from 'date-fns';
 import {
   X, User, Phone, MapPin, Mail, Calendar, MessageSquare,
   Star, Clock, CheckCircle, XCircle, AlertCircle, Plus,
-  ChevronRight, MoveRight
+  ChevronRight, MoveRight, DollarSign, Percent
 } from 'lucide-react';
-import type { Lead, LeadStatus, InterestLevel, Interaction } from '../types/lead';
+import type { Lead, LeadStatus, Priority, LeadTracking } from '../types/lead';
 
 interface LeadDetailsProps {
   lead: Lead;
@@ -14,6 +14,7 @@ interface LeadDetailsProps {
 }
 
 const LEAD_STAGES: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'];
+const PRIORITIES: Priority[] = ['Low', 'Medium', 'High', 'Urgent'];
 
 const STATUS_ICONS: Record<LeadStatus, React.ReactNode> = {
   'New': <Star className="text-blue-500" />,
@@ -52,66 +53,103 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
   const [showStageModal, setShowStageModal] = useState(false);
   const [selectedStage, setSelectedStage] = useState<LeadStatus | null>(null);
   const [stageNote, setStageNote] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [leadData, setLeadData] = useState<Partial<Lead>>({
+    priority: lead.priority || 'Medium',
+    expected_value: lead.expected_value || 0,
+    probability: lead.probability || 0,
+    tracking_notes: lead.tracking_notes || '',
+    next_followup_date: lead.next_followup_date || '',
+    last_contact: lead.last_contact || ''
+  });
 
-  const handleStageChange = () => {
+  const handleLeadChange = (field: keyof Lead, value: any) => {
+    setLeadData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleStageChange = async () => {
     if (!selectedStage || !onUpdate) return;
 
-    const updatedLead: Lead = {
-      ...lead,
-      status: selectedStage,
-      interactions: [
-        ...lead.interactions,
-        {
-          date: new Date().toISOString(),
-          type: 'Stage Change',
-          summary: `Stage changed from ${lead.status} to ${selectedStage}`,
-          notes: stageNote,
-          action_items: []
-        }
-      ]
-    };
-
-    onUpdate(updatedLead);
-    setShowStageModal(false);
-    setSelectedStage(null);
-    setStageNote('');
-  };
-
-  const handleInterestChange = (interest_level: InterestLevel) => {
-    if (onUpdate) {
-      onUpdate({ ...lead, interest_level });
-    }
-  };
-
-  const toggleActivity = (key: keyof Lead['activity_checklist']) => {
-    if (onUpdate) {
-      onUpdate({
+    setIsUpdating(true);
+    try {
+      const updatedLead: Lead = {
         ...lead,
-        activity_checklist: {
-          ...lead.activity_checklist,
-          [key]: !lead.activity_checklist[key]
-        }
-      });
+        ...leadData,
+        status: selectedStage,
+        tracking_notes: stageNote || leadData.tracking_notes,
+        interactions: [
+          ...lead.interactions,
+          {
+            date: new Date().toISOString(),
+            type: 'Stage Change',
+            summary: `Stage changed from ${lead.status} to ${selectedStage}`,
+            notes: stageNote,
+            action_items: []
+          }
+        ]
+      };
+
+      await onUpdate(updatedLead);
+    } finally {
+      setIsUpdating(false);
+      setShowStageModal(false);
+      setSelectedStage(null);
+      setStageNote('');
     }
   };
 
-  const addInteraction = () => {
-    if (!newNote.trim() || !onUpdate) return;
+  const toggleActivity = async (key: keyof Lead['activity_checklist']) => {
+    if (!onUpdate || isUpdating) return;
 
-    const interaction: Interaction = {
-      date: new Date().toISOString(),
-      type: 'Other',
-      summary: newNote,
-      action_items: []
-    };
+    setIsUpdating(true);
+    try {
+      const updatedChecklist = {
+        ...lead.activity_checklist,
+        [key]: !lead.activity_checklist[key]
+      };
 
-    onUpdate({
-      ...lead,
-      interactions: [...lead.interactions, interaction],
-      last_contact: new Date().toISOString()
-    });
+      const updatedLead: Lead = {
+        ...lead,
+        ...leadData,
+        activity_checklist: updatedChecklist,
+        tracking_custom_fields: {
+          ...lead.tracking_custom_fields,
+          activity_checklist: updatedChecklist
+        }
+      };
 
-    setNewNote('');
+      await onUpdate(updatedLead);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const addInteraction = async () => {
+    if (!newNote.trim() || !onUpdate || isUpdating) return;
+
+    setIsUpdating(true);
+    try {
+      const now = new Date().toISOString();
+      const interaction = {
+        date: now,
+        type: 'Other' as const,
+        summary: newNote,
+        action_items: []
+      };
+
+      const updatedLead: Lead = {
+        ...lead,
+        ...leadData,
+        interactions: [...lead.interactions, interaction],
+        last_contact: now,
+        tracking_notes: `${leadData.tracking_notes ? leadData.tracking_notes + '\n' : ''}${newNote}`
+      };
+
+      await onUpdate(updatedLead);
+      setNewNote('');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -134,15 +172,6 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
                     {lead.status}
                     <MoveRight className="w-4 h-4" />
                   </button>
-                  {lead.interest_level && (
-                    <span className={`px-2 py-1 text-sm rounded-full ${
-                      lead.interest_level === 'High' ? 'bg-green-100 text-green-800' :
-                      lead.interest_level === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {lead.interest_level} Interest
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
@@ -154,71 +183,6 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
             </button>
           </div>
         </div>
-
-        {/* Stage Change Modal */}
-        {showStageModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
-            <div className="bg-white rounded-lg w-full max-w-md p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Lead Stage</h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-2">
-                  {LEAD_STAGES.map((stage) => (
-                    <button
-                      key={stage}
-                      onClick={() => setSelectedStage(stage)}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        selectedStage === stage
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {STATUS_ICONS[stage]}
-                        <span className="font-medium">{stage}</span>
-                      </div>
-                      {selectedStage === stage && (
-                        <ChevronRight className="w-5 h-5 text-blue-500" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes (optional)
-                  </label>
-                  <textarea
-                    value={stageNote}
-                    onChange={(e) => setStageNote(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={3}
-                    placeholder="Add any notes about this stage change..."
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setShowStageModal(false);
-                      setSelectedStage(null);
-                      setStageNote('');
-                    }}
-                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleStageChange}
-                    disabled={!selectedStage}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Change Stage
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="border-b border-gray-200">
@@ -240,10 +204,11 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'info' && (
-            <div className="grid grid-cols-2 gap-6">
-              <div>
+        {activeTab === 'info' && (
+          <div className="grid grid-cols-2 gap-6 p-6">
+            <div>
+              {/* Contact Information */}
+              <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
                 <div className="space-y-3">
                   {lead.phone && (
@@ -265,128 +230,263 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
                     </div>
                   )}
                 </div>
-
-                <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-3">Important Dates</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center">
-                    <Calendar className="w-4 h-4 text-gray-400 mr-3" />
-                    <span className="text-gray-600">
-                      Created: {format(new Date(lead.created_at), 'PPP')}
-                    </span>
-                  </div>
-                  {lead.initial_contact_date && (
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 text-gray-400 mr-3" />
-                      <span className="text-gray-600">
-                        Initial Contact: {format(new Date(lead.initial_contact_date), 'PPP')}
-                      </span>
-                    </div>
-                  )}
-                  {lead.next_followup_date && (
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 text-gray-400 mr-3" />
-                      <span className="text-gray-600">
-                        Next Follow-up: {format(new Date(lead.next_followup_date), 'PPP')}
-                      </span>
-                    </div>
-                  )}
-                </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
-                {lead.comments ? (
-                  <p className="text-sm text-gray-600">{lead.comments}</p>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No notes available</p>
-                )}
+              {/* Lead Tracking */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Lead Tracking</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Priority
+                    </label>
+                    <select
+                      value={leadData.priority}
+                      onChange={(e) => handleLeadChange('priority', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {PRIORITIES.map(priority => (
+                        <option key={priority} value={priority}>{priority}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expected Value
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="number"
+                        value={leadData.expected_value || ''}
+                        onChange={(e) => handleLeadChange('expected_value', parseFloat(e.target.value))}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Probability
+                    </label>
+                    <div className="relative">
+                      <Percent className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={leadData.probability || ''}
+                        onChange={(e) => handleLeadChange('probability', parseInt(e.target.value))}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Next Follow-up
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={leadData.next_followup_date ? new Date(leadData.next_followup_date).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => handleLeadChange('next_followup_date', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          )}
 
-          {activeTab === 'activity' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Activity Checklist</h3>
-                <div className="space-y-2">
-                  {Object.entries(lead.activity_checklist).map(([key, value]) => (
-                    <label
-                      key={key}
-                      className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
+              <textarea
+                value={leadData.tracking_notes || ''}
+                onChange={(e) => handleLeadChange('tracking_notes', e.target.value)}
+                className="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Add notes about this lead..."
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Activity tab */}
+        {activeTab === 'activity' && (
+          <div className="space-y-6 p-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Activity Checklist</h3>
+              <div className="space-y-2">
+                {Object.entries(lead.activity_checklist).map(([key, value]) => (
+                  <label
+                    key={key}
+                    className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 relative"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={() => toggleActivity(key as keyof Lead['activity_checklist'])}
+                      disabled={isUpdating}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-3 text-sm text-gray-700">
+                      {key.split('_').map(word => 
+                        word.charAt(0).toUpperCase() + word.slice(1)
+                      ).join(' ')}
+                    </span>
+                    {isUpdating && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      </div>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Add Note</h3>
+              <div className="space-y-3">
+                <textarea
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  placeholder="Enter your notes here..."
+                  className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  onClick={addInteraction}
+                  disabled={isUpdating}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Note
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* History tab */}
+        {activeTab === 'history' && (
+          <div className="space-y-4 p-6">
+            {lead.interactions.length > 0 ? (
+              lead.interactions.map((interaction, index) => (
+                <div
+                  key={index}
+                  className="border border-gray-200 rounded-lg p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-900">
+                      {format(new Date(interaction.date), 'PPP')}
+                    </span>
+                    <span className="text-sm text-gray-500">{interaction.type}</span>
+                  </div>
+                  <p className="text-gray-600 mb-2">{interaction.summary}</p>
+                  {interaction.action_items.length > 0 && (
+                    <div className="mt-2">
+                      <h4 className="text-sm font-medium text-gray-700 mb-1">Action Items:</h4>
+                      <ul className="list-disc pl-5 space-y-1">
+                        {interaction.action_items.map((item, i) => (
+                          <li key={i} className="text-sm text-gray-600">{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {interaction.notes && (
+                    <p className="mt-2 text-sm text-gray-500">{interaction.notes}</p>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-gray-500 py-8">No interaction history available</p>
+            )}
+          </div>
+        )}
+
+        {/* Stage change modal */}
+        {showStageModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+            <div className="bg-white rounded-lg w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Lead Stage</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  {LEAD_STAGES.map((stage) => (
+                    <button
+                      key={stage}
+                      onClick={() => setSelectedStage(stage)}
+                      disabled={isUpdating}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        selectedStage === stage
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      } ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={value}
-                        onChange={() => toggleActivity(key as keyof Lead['activity_checklist'])}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-3 text-sm text-gray-700">
-                        {key.split('_').map(word => 
-                          word.charAt(0).toUpperCase() + word.slice(1)
-                        ).join(' ')}
-                      </span>
-                    </label>
+                      <div className="flex items-center gap-2">
+                        {STATUS_ICONS[stage]}
+                        <span className="font-medium">{stage}</span>
+                      </div>
+                      {selectedStage === stage && (
+                        <ChevronRight className="w-5 h-5 text-blue-500" />
+                      )}
+                    </button>
                   ))}
                 </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Add Note</h3>
-                <div className="space-y-3">
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (optional)
+                  </label>
                   <textarea
-                    value={newNote}
-                    onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="Enter your notes here..."
-                    className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={stageNote}
+                    onChange={(e) => setStageNote(e.target.value)}
+                    disabled={isUpdating}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={3}
+                    placeholder="Add any notes about this stage change..."
                   />
+                </div>
+
+                <div className="flex justify-end gap-3">
                   <button
-                    onClick={addInteraction}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    onClick={() => {
+                      setShowStageModal(false);
+                      setSelectedStage(null);
+                      setStageNote('');
+                    }}
+                    disabled={isUpdating}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Note
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleStageChange}
+                    disabled={!selectedStage || isUpdating}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      'Change Stage'
+                    )}
                   </button>
                 </div>
               </div>
             </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div className="space-y-4">
-              {lead.interactions.length > 0 ? (
-                lead.interactions.map((interaction, index) => (
-                  <div
-                    key={index}
-                    className="border border-gray-200 rounded-lg p-4"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">
-                        {format(new Date(interaction.date), 'PPP')}
-                      </span>
-                      <span className="text-sm text-gray-500">{interaction.type}</span>
-                    </div>
-                    <p className="text-gray-600 mb-2">{interaction.summary}</p>
-                    {interaction.action_items.length > 0 && (
-                      <div className="mt-2">
-                        <h4 className="text-sm font-medium text-gray-700 mb-1">Action Items:</h4>
-                        <ul className="list-disc pl-5 space-y-1">
-                          {interaction.action_items.map((item, i) => (
-                            <li key={i} className="text-sm text-gray-600">{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {interaction.notes && (
-                      <p className="mt-2 text-sm text-gray-500">{interaction.notes}</p>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-gray-500 py-8">No interaction history available</p>
-              )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost';
 export type InterestLevel = 'High' | 'Medium' | 'Low';
+export type Priority = 'Low' | 'Medium' | 'High' | 'Urgent';
 
 export interface ActivityChecklist {
   initial_call: boolean;
@@ -44,6 +45,16 @@ export interface Lead {
   objections: string[];
   next_steps?: string;
   interactions: Interaction[];
+  // New tracking fields
+  priority?: Priority;
+  assigned_to?: string;
+  expected_value?: number;
+  probability?: number;
+  tracking_notes?: string;
+  tracking_custom_fields?: {
+    activity_checklist?: ActivityChecklist;
+    [key: string]: any;
+  };
 }
 
 export interface LeadStats {
