@@ -1,7 +1,7 @@
 import React from 'react';
-import { Grid, List, Columns } from 'lucide-react';
+import { Grid, List } from 'lucide-react';
 
-export type ViewType = 'grid' | 'list' | 'kanban';
+export type ViewType = 'grid' | 'list';
 
 interface ViewToggleProps {
   currentView: ViewType;
@@ -24,25 +24,14 @@ export function ViewToggle({ currentView, onViewChange }: ViewToggleProps) {
       </button>
       <button
         onClick={() => onViewChange('list')}
-        className={`p-2 border-l border-r border-gray-300 ${
+        className={`p-2 border-l border-gray-300 ${
           currentView === 'list'
             ? 'bg-blue-50 text-blue-600'
             : 'text-gray-600 hover:bg-gray-50'
-        }`}
+        } rounded-r-lg`}
         title="List View"
       >
         <List className="w-5 h-5" />
-      </button>
-      <button
-        onClick={() => onViewChange('kanban')}
-        className={`p-2 ${
-          currentView === 'kanban'
-            ? 'bg-blue-50 text-blue-600'
-            : 'text-gray-600 hover:bg-gray-50'
-        } rounded-r-lg`}
-        title="Kanban View"
-      >
-        <Columns className="w-5 h-5" />
       </button>
     </div>
   );

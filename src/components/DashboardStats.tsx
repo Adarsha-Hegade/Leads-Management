@@ -16,7 +16,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     },
     {
       title: 'Pending Follow-ups',
-      value: stats.followUp,
+      value: stats.total-stats.followUp,
       icon: Clock,
       color: 'bg-yellow-500',
     },

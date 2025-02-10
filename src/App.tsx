@@ -7,7 +7,6 @@ import { DashboardStats } from './components/DashboardStats';
 import { TimeFilter } from './components/TimeFilter';
 import { ViewToggle, ViewType } from './components/ViewToggle';
 import { ListView } from './components/ListView';
-import { KanbanView } from './components/KanbanView';
 import { Auth } from './components/Auth';
 import type { Lead, LeadStats } from './types/lead';
 
@@ -46,9 +45,11 @@ function App() {
 
   async function fetchLeads() {
     try {
-      let query = supabase
+      // First, get all leads
+      let leadsQuery = supabase
         .from('leads')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (timeRange !== 'all') {
         const now = new Date();
@@ -70,18 +71,62 @@ function App() {
         }
 
         if (timeAgo) {
-          query = query.gte('created_at', timeAgo.toISOString());
+          leadsQuery = leadsQuery.gte('created_at', timeAgo.toISOString());
         }
       }
 
-      query = query.order('created_at', { ascending: false });
+      const { data: leadsData, error: leadsError } = await leadsQuery;
 
-      const { data, error } = await query;
+      if (leadsError) throw leadsError;
 
-      if (error) throw error;
-      if (!data) throw new Error('No data received from Supabase');
+      // Then, get tracking data for the current user
+      const { data: trackingData, error: trackingError } = await supabase
+        .from('leads_tracking')
+        .select(`
+          *,
+          leads_tracking_history (
+            changed_fields,
+            previous_values,
+            new_values,
+            changed_at
+          )
+        `)
+        .eq('user_id', user.id);
 
-      setLeads(data);
+      if (trackingError) throw trackingError;
+
+      // Merge leads with their tracking data
+      const mergedLeads = leadsData.map(lead => {
+        const tracking = trackingData?.find(t => t.lead_id === lead.id);
+        
+        // Convert tracking history to interactions
+        const interactions = tracking?.leads_tracking_history?.map(history => ({
+          date: history.changed_at,
+          type: 'Stage Change',
+          summary: `Changed from ${history.previous_values.status || 'New'} to ${history.new_values.status}`,
+          notes: history.new_values.notes || '',
+          action_items: []
+        })) || [];
+
+        return {
+          ...lead,
+          status: tracking?.status || 'New',
+          comments: tracking?.notes || '',
+          last_contact: tracking?.last_contact_date,
+          next_followup_date: tracking?.next_follow_up,
+          interest_level: tracking?.priority?.toLowerCase(),
+          activity_checklist: tracking?.custom_fields?.activity_checklist || {
+            initial_call: false,
+            catalogue_sent: false,
+            demo_completed: false,
+            pricing_discussed: false,
+            proposal_sent: false
+          },
+          interactions
+        };
+      });
+
+      setLeads(mergedLeads);
     } catch (err) {
       console.error('Error fetching leads:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while fetching leads');
@@ -102,19 +147,54 @@ function App() {
 
   const handleLeadUpdate = async (updatedLead: Lead) => {
     try {
-      const { error } = await supabase
-        .from('leads')
-        .update(updatedLead)
-        .eq('id', updatedLead.id);
+      // Update or insert tracking data
+      const { data: existingTracking } = await supabase
+        .from('leads_tracking')
+        .select('id, status, notes')
+        .eq('lead_id', updatedLead.id)
+        .eq('user_id', user.id)
+        .single();
 
-      if (error) throw error;
+      const trackingData = {
+        lead_id: updatedLead.id,
+        user_id: user.id,
+        status: updatedLead.status,
+        priority: updatedLead.interest_level?.toUpperCase(),
+        last_contact_date: updatedLead.last_contact,
+        next_follow_up: updatedLead.next_followup_date,
+        notes: updatedLead.comments,
+        custom_fields: {
+          activity_checklist: updatedLead.activity_checklist
+        }
+      };
 
-      setLeads(leads.map(lead => 
-        lead.id === updatedLead.id ? updatedLead : lead
-      ));
+      if (existingTracking) {
+        // Only update if there are actual changes
+        if (
+          existingTracking.status !== updatedLead.status ||
+          existingTracking.notes !== updatedLead.comments
+        ) {
+          const { error } = await supabase
+            .from('leads_tracking')
+            .update(trackingData)
+            .eq('id', existingTracking.id);
+
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from('leads_tracking')
+          .insert([trackingData]);
+
+        if (error) throw error;
+      }
+
+      // Refresh leads after update
+      await fetchLeads();
       
       if (selectedLead?.id === updatedLead.id) {
-        setSelectedLead(updatedLead);
+        const updatedLeadData = leads.find(l => l.id === updatedLead.id);
+        setSelectedLead(updatedLeadData || null);
       }
     } catch (err) {
       console.error('Error updating lead:', err);
@@ -157,8 +237,6 @@ function App() {
     switch (viewType) {
       case 'list':
         return <ListView leads={filteredLeads} onLeadClick={setSelectedLead} />;
-      case 'kanban':
-        return <KanbanView leads={filteredLeads} onLeadClick={setSelectedLead} />;
       default:
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
