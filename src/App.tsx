@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Filter } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { supabase, signOut, getCurrentUser } from './lib/supabase';
 import { LeadCard } from './components/LeadCard';
 import { LeadDetails } from './components/LeadDetails';
 import { DashboardStats } from './components/DashboardStats';
 import { TimeFilter } from './components/TimeFilter';
+import { ViewToggle, ViewType } from './components/ViewToggle';
+import { ListView } from './components/ListView';
+import { KanbanView } from './components/KanbanView';
+import { Auth } from './components/Auth';
 import type { Lead, LeadStats } from './types/lead';
 
 function App() {
@@ -15,16 +19,37 @@ function App() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [timeRange, setTimeRange] = useState<string>('all');
+  const [viewType, setViewType] = useState<ViewType>('grid');
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    fetchLeads();
-  }, [timeRange]);
+    checkUser();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+    }
+  }, [timeRange, user]);
+
+  async function checkUser() {
+    try {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    } catch (err) {
+      console.error('Error checking user:', err);
+    } finally {
+      setAuthChecked(true);
+    }
+  }
 
   async function fetchLeads() {
     try {
       let query = supabase
         .from('leads')
-        .select('*');
+        .select('*')
+        .eq('user_id', user.id);
 
       if (timeRange !== 'all') {
         const now = new Date();
@@ -52,14 +77,8 @@ function App() {
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-
-      if (!data) {
-        throw new Error('No data received from Supabase');
-      }
+      if (error) throw error;
+      if (!data) throw new Error('No data received from Supabase');
 
       setLeads(data);
     } catch (err) {
@@ -69,6 +88,39 @@ function App() {
       setLoading(false);
     }
   }
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      setUser(null);
+      setLeads([]);
+    } catch (err) {
+      console.error('Error signing out:', err);
+    }
+  };
+
+  const handleLeadUpdate = async (updatedLead: Lead) => {
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update(updatedLead)
+        .eq('id', updatedLead.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setLeads(leads.map(lead => 
+        lead.id === updatedLead.id ? updatedLead : lead
+      ));
+      
+      if (selectedLead?.id === updatedLead.id) {
+        setSelectedLead(updatedLead);
+      }
+    } catch (err) {
+      console.error('Error updating lead:', err);
+      // You might want to show an error message to the user here
+    }
+  };
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = 
@@ -94,6 +146,35 @@ function App() {
     notInterested: filteredLeads.filter(lead => lead.status === 'Not Interested').length,
   };
 
+  if (!authChecked) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return <Auth onSuccess={checkUser} />;
+  }
+
+  const renderLeadsView = () => {
+    switch (viewType) {
+      case 'list':
+        return <ListView leads={filteredLeads} onLeadClick={setSelectedLead} />;
+      case 'kanban':
+        return <KanbanView leads={filteredLeads} onLeadClick={setSelectedLead} />;
+      default:
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredLeads.map(lead => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                onClick={setSelectedLead}
+              />
+            ))}
+          </div>
+        );
+    }
+  };
+
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -108,11 +189,19 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Lead Management</h1>
-          <p className="text-gray-600">
-            {loading ? 'Loading leads...' : `${filteredLeads.length} leads found`}
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Lead Management</h1>
+            <p className="text-gray-600">
+              {loading ? 'Loading leads...' : `${filteredLeads.length} leads found`}
+            </p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+          >
+            Sign Out
+          </button>
         </div>
 
         <DashboardStats stats={stats} />
@@ -145,6 +234,7 @@ function App() {
                 </select>
                 <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
               </div>
+              <ViewToggle currentView={viewType} onViewChange={setViewType} />
             </div>
           </div>
         </div>
@@ -161,15 +251,7 @@ function App() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredLeads.map(lead => (
-                <LeadCard
-                  key={lead.id}
-                  lead={lead}
-                  onClick={setSelectedLead}
-                />
-              ))}
-            </div>
+            {renderLeadsView()}
 
             {filteredLeads.length === 0 && (
               <div className="text-center py-12">
@@ -185,6 +267,7 @@ function App() {
         <LeadDetails
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
+          onUpdate={handleLeadUpdate}
         />
       )}
     </div>
