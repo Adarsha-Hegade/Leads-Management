@@ -27,7 +27,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       color: 'bg-green-500',
     },
     {
-      title: 'Not Interested',
+      title: 'Lost',
       value: stats.notInterested,
       icon: Ban,
       color: 'bg-red-500',

@@ -246,18 +246,24 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center">
-                    <Phone className="w-4 h-4 text-gray-400 mr-3" />
-                    <span className="text-gray-600">{lead.phone}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Mail className="w-4 h-4 text-gray-400 mr-3" />
-                    <span className="text-gray-600">{lead.email}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <MapPin className="w-4 h-4 text-gray-400 mr-3" />
-                    <span className="text-gray-600">{lead.city}</span>
-                  </div>
+                  {lead.phone && (
+                    <div className="flex items-center">
+                      <Phone className="w-4 h-4 text-gray-400 mr-3" />
+                      <span className="text-gray-600">{lead.phone}</span>
+                    </div>
+                  )}
+                  {lead.email && (
+                    <div className="flex items-center">
+                      <Mail className="w-4 h-4 text-gray-400 mr-3" />
+                      <span className="text-gray-600">{lead.email}</span>
+                    </div>
+                  )}
+                  {lead.city && (
+                    <div className="flex items-center">
+                      <MapPin className="w-4 h-4 text-gray-400 mr-3" />
+                      <span className="text-gray-600">{lead.city}</span>
+                    </div>
+                  )}
                 </div>
 
                 <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-3">Important Dates</h3>
@@ -288,41 +294,12 @@ export function LeadDetails({ lead, onClose, onUpdate }: LeadDetailsProps) {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Requirements & Objections</h3>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="text-sm text-gray-600 mb-2">Requirements</h4>
-                    {lead.requirements.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1">
-                        {lead.requirements.map((req, i) => (
-                          <li key={i} className="text-sm text-gray-600">{req}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-gray-500 italic">No requirements recorded</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm text-gray-600 mb-2">Objections</h4>
-                    {lead.objections.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1">
-                        {lead.objections.map((obj, i) => (
-                          <li key={i} className="text-sm text-gray-600">{obj}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-gray-500 italic">No objections recorded</p>
-                    )}
-                  </div>
-
-                  {lead.next_steps && (
-                    <div>
-                      <h4 className="text-sm text-gray-600 mb-2">Next Steps</h4>
-                      <p className="text-sm text-gray-600">{lead.next_steps}</p>
-                    </div>
-                  )}
-                </div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
+                {lead.comments ? (
+                  <p className="text-sm text-gray-600">{lead.comments}</p>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No notes available</p>
+                )}
               </div>
             </div>
           )}

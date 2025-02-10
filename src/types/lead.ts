@@ -20,19 +20,19 @@ export interface Interaction {
 export interface Lead {
   id: string;
   name: string;
-  phone: string;
-  city: string;
-  email: string;
-  url_slugs: string[];
+  phone?: string;
+  city?: string;
+  email?: string;
+  url_slugs?: string[];
   created_at: string;
   lead_type: string;
-  device_info: {
+  device_info?: {
     [key: string]: any;
   };
-  location_info: {
+  location_info?: {
     [key: string]: any;
   };
-  comments: string;
+  comments?: string;
   status: LeadStatus;
   lead_source?: string;
   initial_contact_date?: string;

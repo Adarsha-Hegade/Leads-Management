@@ -74,7 +74,6 @@ function App() {
         }
       }
 
-      // Add order after all filters
       query = query.order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -141,9 +140,9 @@ function App() {
   const stats: LeadStats = {
     total: filteredLeads.length,
     new: filteredLeads.filter(lead => lead.status === 'New').length,
-    followUp: filteredLeads.filter(lead => lead.status === 'Follow-up').length,
-    converted: filteredLeads.filter(lead => lead.status === 'Converted').length,
-    notInterested: filteredLeads.filter(lead => lead.status === 'Not Interested').length,
+    followUp: filteredLeads.filter(lead => lead.status === 'Contacted').length,
+    converted: filteredLeads.filter(lead => lead.status === 'Won').length,
+    notInterested: filteredLeads.filter(lead => lead.status === 'Lost').length,
   };
 
   if (!authChecked) {
