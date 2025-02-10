@@ -31,7 +31,6 @@ function App() {
       fetchLeads();
     }
   }, [timeRange, user]);
-
   async function checkUser() {
     try {
       const currentUser = await getCurrentUser();
@@ -42,7 +41,6 @@ function App() {
       setAuthChecked(true);
     }
   }
-
   async function fetchLeads() {
     try {
       // First, get all leads
