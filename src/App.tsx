@@ -348,6 +348,7 @@ function App() {
   useEffect(() => {
     if (user) {
       fetchLeads();
+     
     }
   }, [timeRange, user]);
 
@@ -370,7 +371,7 @@ function App() {
         .from('leads')
         .select('*')
         .order('created_at', { ascending: false });
-
+ 
       if (timeRange !== 'all') {
         const now = new Date();
         let timeAgo;
